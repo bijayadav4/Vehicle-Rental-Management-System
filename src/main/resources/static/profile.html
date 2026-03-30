@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>My Profile</h1>
+    <div class="navbar-right">
+        <a href="/borrower-dashboard.html"><button class="btn btn-primary">Dashboard</button></a>
+        <a href="/wallet.html"><button class="btn btn-success">Wallet</button></a>
+        <button class="btn btn-secondary" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container container-narrow">
+    <div id="alert" class="alert"></div>
+
+    <!-- Profile Info Card -->
+    <div class="card">
+        <h2>Account Details</h2>
+        <div class="avatar-stack">
+            <div class="avatar-circle" id="avatarLetter">?</div>
+            <div>
+                <div class="profile-name" id="profileName">-</div>
+                <div class="profile-email" id="profileEmail">-</div>
+                <div>
+                    <span class="badge badge-success" id="profileBalance">Balance: -</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="fullName" placeholder="Enter your full name">
+        </div>
+        <div class="form-group">
+            <label>Phone Number</label>
+            <input type="text" id="phone" placeholder="Enter phone number">
+        </div>
+        <div class="form-group">
+            <label>Email (cannot change)</label>
+            <input type="text" id="emailDisplay" disabled
+                   class="input-disabled">
+        </div>
+        <button class="btn btn-primary" onclick="updateProfile()">Save Changes</button>
+    </div>
+
+    <!-- Change Password Card -->
+    <div class="card">
+        <h2>Change Password</h2>
+        <div class="form-group">
+            <label>Current Password</label>
+            <input type="password" id="currentPass" placeholder="Current password">
+        </div>
+        <div class="form-group">
+            <label>New Password</label>
+            <input type="password" id="newPass" placeholder="New password">
+        </div>
+        <button class="btn btn-warning" onclick="changePassword()">Update Password</button>
+    </div>
+
+    <!-- Rental Stats Card -->
+    <div class="card">
+        <h2>My Rental Stats</h2>
+        <div class="stats-grid stats-grid-two">
+            <div class="stat-card">
+                <div class="number" id="statTotal">-</div>
+                <div class="label">Total Bookings</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="statActive">-</div>
+                <div class="label">Active Now</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('BORROWER');
+
+async function loadProfile() {
+    const user = await apiGet('/user/profile');
+    document.getElementById('avatarLetter').textContent =
+        (user.fullName || user.email).charAt(0).toUpperCase();
+    document.getElementById('profileName').textContent  = user.fullName || 'No name set';
+    document.getElementById('profileEmail').textContent = user.email;
+    document.getElementById('profileBalance').textContent =
+        'Balance: Rs.' + user.securityBalance;
+    document.getElementById('fullName').value     = user.fullName || '';
+    document.getElementById('phone').value        = user.phone || '';
+    document.getElementById('emailDisplay').value = user.email;
+}
+
+async function loadStats() {
+    const all    = await apiGet('/bookings/my');
+    const active = await apiGet('/bookings/my/active');
+    document.getElementById('statTotal').textContent  = all.length;
+    document.getElementById('statActive').textContent = active.length;
+}
+
+async function updateProfile() {
+    const body = {
+        fullName: document.getElementById('fullName').value,
+        phone:    document.getElementById('phone').value
+    };
+    const data = await apiPut('/user/profile', body);
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    if (data.success) loadProfile();
+}
+
+async function changePassword() {
+    const body = {
+        currentPassword: document.getElementById('currentPass').value,
+        newPassword:     document.getElementById('newPass').value
+    };
+    const data = await apiPut('/user/profile', body);
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    if (data.success) {
+        document.getElementById('currentPass').value = '';
+        document.getElementById('newPass').value = '';
+    }
+}
+
+loadProfile();
+loadStats();
+</script>
+</body>
+</html>

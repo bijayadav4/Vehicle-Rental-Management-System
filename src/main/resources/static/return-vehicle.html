@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Return Vehicle</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>Return Vehicle</h1>
+    <div class="navbar-right">
+        <a href="/my-bookings.html"><button class="btn btn-secondary">My Bookings</button></a>
+        <button class="btn btn-danger" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container">
+    <div id="alert" class="alert"></div>
+
+    <div class="card">
+        <h2>Return Vehicle</h2>
+        <div class="form-group">
+            <label>Booking ID</label>
+            <input type="number" id="returnBookingId" placeholder="Enter booking ID">
+        </div>
+        <div class="form-group">
+            <label>KMs Driven Today</label>
+            <input type="number" id="kmsRidden" placeholder="200">
+        </div>
+        <div class="form-group">
+            <label>Damage Level (Cars only)</label>
+            <select id="damageLevel">
+                <option value="NONE">No Damage</option>
+                <option value="LOW">Low (20% fine)</option>
+                <option value="MEDIUM">Medium (50% fine)</option>
+                <option value="HIGH">High (75% fine)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Payment Method</label>
+            <select id="paymentMethod">
+                <option value="CASH">Cash</option>
+                <option value="DEPOSIT">Deduct from Security Deposit</option>
+            </select>
+        </div>
+        <button class="btn btn-success" onclick="returnVehicle()">Return Vehicle</button>
+    </div>
+
+    <div class="card hidden" id="billCard">
+        <h2>Billing Summary</h2>
+        <table>
+            <tr><td><strong>Base Rent</strong></td><td id="billBase"></td></tr>
+            <tr><td><strong>Extra KM Charge</strong></td><td id="billKm"></td></tr>
+            <tr><td><strong>Damage Fine</strong></td><td id="billDamage"></td></tr>
+            <tr style="background:#fff3cd">
+                <td><strong>Total Charge</strong></td>
+                <td id="billTotal" style="font-weight:700;color:#e94560"></td>
+            </tr>
+            <tr><td><strong>Remaining Deposit</strong></td><td id="billBalance"></td></tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Extend Tenure</h2>
+        <div class="form-group">
+            <label>Booking ID</label>
+            <input type="number" id="extendBookingId" placeholder="Enter booking ID">
+        </div>
+        <button class="btn btn-warning" onclick="extendTenure()">Extend by 1 Day</button>
+        <p style="font-size:13px;color:#666;margin-top:8px">Max 2 extensions per booking.</p>
+    </div>
+
+    <div class="card">
+        <h2>Exchange Vehicle</h2>
+        <div class="form-group">
+            <label>Current Booking ID</label>
+            <input type="number" id="exchangeBookingId" placeholder="Current booking ID">
+        </div>
+        <div class="form-group">
+            <label>New Vehicle ID</label>
+            <input type="number" id="newVehicleId" placeholder="New vehicle ID">
+        </div>
+        <div class="form-group">
+            <label>KMs driven on current vehicle</label>
+            <input type="number" id="exchangeKms" placeholder="100">
+        </div>
+        <div class="form-group">
+            <label>Payment for partial rent</label>
+            <select id="exchangePayment">
+                <option value="CASH">Cash</option>
+                <option value="DEPOSIT">Security Deposit</option>
+            </select>
+        </div>
+        <button class="btn btn-info" onclick="exchangeVehicle()">Exchange Vehicle</button>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('BORROWER');
+
+const params = new URLSearchParams(window.location.search);
+if (params.get('bookingId')) {
+    document.getElementById('returnBookingId').value = params.get('bookingId');
+    document.getElementById('extendBookingId').value = params.get('bookingId');
+}
+
+async function returnVehicle() {
+    const body = {
+        bookingId: +document.getElementById('returnBookingId').value,
+        kmsRidden: +document.getElementById('kmsRidden').value,
+        damageLevel: document.getElementById('damageLevel').value,
+        paymentMethod: document.getElementById('paymentMethod').value
+    };
+    const data = await apiPost('/bookings/return', body);
+    if (data.success) {
+        showAlert('alert', data.message, 'success');
+        document.getElementById('billCard').classList.remove('hidden');
+        document.getElementById('billBase').textContent    = 'Rs.' + data.baseRent;
+        document.getElementById('billKm').textContent      = 'Rs.' + data.kmCharge;
+        document.getElementById('billDamage').textContent  = 'Rs.' + data.damageFine;
+        document.getElementById('billTotal').textContent   = 'Rs.' + data.totalCharge;
+        document.getElementById('billBalance').textContent = 'Rs.' + data.remainingBalance;
+    } else {
+        showAlert('alert', data.message, 'danger');
+    }
+}
+
+async function extendTenure() {
+    const bookingId = +document.getElementById('extendBookingId').value;
+    const data = await apiPost('/bookings/extend', { bookingId });
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+}
+
+async function exchangeVehicle() {
+    const body = {
+        bookingId: +document.getElementById('exchangeBookingId').value,
+        newVehicleId: +document.getElementById('newVehicleId').value,
+        kmsRidden: +document.getElementById('exchangeKms').value,
+        paymentMethod: document.getElementById('exchangePayment').value
+    };
+    const data = await apiPost('/bookings/exchange', body);
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+}
+</script>
+</body>
+</html>

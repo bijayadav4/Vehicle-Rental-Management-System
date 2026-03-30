@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Wallet</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>My Wallet</h1>
+    <div class="navbar-right">
+        <a href="/borrower-dashboard.html"><button class="btn btn-primary">Dashboard</button></a>
+        <a href="/profile.html"><button class="btn btn-secondary">Profile</button></a>
+        <button class="btn btn-danger" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container container-narrow">
+    <div id="alert" class="alert"></div>
+
+    <!-- Balance Card -->
+    <div class="card" style="text-align:center;padding:34px">
+        <div class="summary-title">Security Deposit Balance</div>
+        <div class="summary-amount" id="balanceDisplay">Rs.0</div>
+        <div class="meta-note" style="margin-top:8px">
+            Min required: Rs.10,000 for Cars | Rs.3,000 for Bikes
+        </div>
+    </div>
+
+    <!-- Quick Top-up buttons -->
+    <div class="card">
+        <h2>Top Up Security Deposit</h2>
+        <p style="color:#666;font-size:14px;margin-bottom:16px">
+            Add money to your security deposit. Amount will be refunded when you return vehicles.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+            <button class="btn btn-primary" onclick="quickTopup(1000)">+ Rs.1,000</button>
+            <button class="btn btn-primary" onclick="quickTopup(3000)">+ Rs.3,000</button>
+            <button class="btn btn-primary" onclick="quickTopup(5000)">+ Rs.5,000</button>
+            <button class="btn btn-primary" onclick="quickTopup(10000)">+ Rs.10,000</button>
+        </div>
+
+        <div class="form-group">
+            <label>Or enter custom amount</label>
+            <input type="number" id="customAmount" placeholder="Enter amount in Rs.">
+        </div>
+        <button class="btn btn-success" style="width:100%" onclick="topup()">
+            Add to Wallet
+        </button>
+    </div>
+
+    <!-- Transaction Info -->
+    <div class="card">
+        <h2>Deposit Rules</h2>
+        <table>
+            <tr>
+                <td style="padding:10px">Minimum for Car rental</td>
+                <td style="padding:10px;font-weight:700;color:#e94560">Rs.10,000</td>
+            </tr>
+            <tr style="background:#f9f9f9">
+                <td style="padding:10px">Minimum for Bike rental</td>
+                <td style="padding:10px;font-weight:700;color:#e94560">Rs.3,000</td>
+            </tr>
+            <tr>
+                <td style="padding:10px">Initial deposit on signup</td>
+                <td style="padding:10px;font-weight:700;color:#28a745">Rs.30,000</td>
+            </tr>
+            <tr style="background:#f9f9f9">
+                <td style="padding:10px">Refunded on return</td>
+                <td style="padding:10px;font-weight:700;color:#28a745">Full amount (minus fines)</td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('BORROWER');
+
+async function loadBalance() {
+    const user = await apiGet('/user/profile');
+    document.getElementById('balanceDisplay').textContent =
+        'Rs.' + user.securityBalance.toLocaleString();
+}
+
+function quickTopup(amount) {
+    document.getElementById('customAmount').value = amount;
+    topup();
+}
+
+async function topup() {
+    const amount = parseFloat(document.getElementById('customAmount').value);
+    if (!amount || amount <= 0) {
+        showAlert('alert', 'Please enter a valid amount.', 'danger');
+        return;
+    }
+    const data = await apiPost('/user/wallet/topup', { amount });
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    if (data.success) {
+        document.getElementById('customAmount').value = '';
+        loadBalance();
+    }
+}
+
+loadBalance();
+</script>
+</body>
+</html>

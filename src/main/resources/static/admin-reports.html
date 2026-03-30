@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Reports</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>Admin Reports</h1>
+    <div class="navbar-right">
+        <a href="/admin-dashboard.html"><button class="btn btn-secondary">Dashboard</button></a>
+        <a href="/manage-vehicles.html"><button class="btn btn-primary">Manage Vehicles</button></a>
+        <button class="btn btn-danger" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container">
+
+    <!-- Report 1 — Service Due -->
+    <div class="card">
+        <h2>Report 1 — Vehicles Due for Service</h2>
+        <div id="serviceDueCount" class="report-meta"></div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th><th>Name</th><th>Type</th>
+                    <th>Plate</th><th>KMs Run</th><th>Service Limit</th>
+                </tr>
+            </thead>
+            <tbody id="serviceDueTable"></tbody>
+        </table>
+    </div>
+
+    <!-- Report 2 — Sorted by Price -->
+    <div class="card">
+        <h2>Report 2 — All Vehicles by Rental Price</h2>
+        <div class="actions-row">
+            <button class="btn btn-primary" onclick="loadByPrice('asc')">Low to High</button>
+            <button class="btn btn-secondary" onclick="loadByPrice('desc')">High to Low</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th><th>Name</th><th>Type</th>
+                    <th>Price/Day</th><th>Deposit</th><th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="priceTable"></tbody>
+        </table>
+    </div>
+
+    <!-- Report 3 — Search & Filter -->
+    <div class="card">
+        <h2>Report 3 — Search & Filter Vehicles</h2>
+        <div class="filter-row">
+            <input type="text" id="reportSearch" placeholder="Search by name...">
+            <button class="btn btn-primary" onclick="searchReport()">Search</button>
+            <button class="btn btn-info"    onclick="filterReport('CAR')">Cars Only</button>
+            <button class="btn btn-warning" onclick="filterReport('BIKE')">Bikes Only</button>
+            <button class="btn btn-secondary" onclick="loadSearchReport()">Reset</button>
+        </div>
+        <div id="searchCount" class="report-meta"></div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th><th>Name</th><th>Type</th>
+                    <th>Plate</th><th>Price/Day</th><th>Available</th>
+                </tr>
+            </thead>
+            <tbody id="searchTable"></tbody>
+        </table>
+    </div>
+
+    <!-- Report 4 — Rented vs Never Rented -->
+    <div class="card">
+        <h2>Report 4 — Currently Rented vs Never Rented</h2>
+
+        <h3 class="report-title-hot">Currently Rented Out</h3>
+        <table>
+            <thead>
+                <tr><th>ID</th><th>Name</th><th>Type</th><th>Plate</th><th>Rented By</th></tr>
+            </thead>
+            <tbody id="rentedTable"></tbody>
+        </table>
+
+        <h3 class="report-title-cool">Never Been Rented</h3>
+        <table>
+            <thead>
+                <tr><th>ID</th><th>Name</th><th>Type</th><th>Plate</th><th>Price/Day</th></tr>
+            </thead>
+            <tbody id="neverRentedTable"></tbody>
+        </table>
+    </div>
+
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('ADMIN');
+
+let allVehiclesCache = [];
+let allBookingsCache = [];
+
+async function loadAll() {
+    allVehiclesCache = await apiGet('/vehicles');
+    allBookingsCache = await apiGet('/bookings/all');
+    loadServiceDue();
+    loadByPrice('asc');
+    loadSearchReport();
+    loadRentedReport();
+}
+
+// ── Report 1 ─────────────────────────────────────────
+async function loadServiceDue() {
+    const data = await apiGet('/vehicles/service-due');
+    const tbody = document.getElementById('serviceDueTable');
+    document.getElementById('serviceDueCount').textContent =
+        data.length === 0
+            ? 'All vehicles are within service limits.'
+            : data.length + ' vehicle(s) need servicing.';
+
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">All OK</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.map(v => `
+        <tr>
+            <td>${v.id}</td>
+            <td>${v.name}</td>
+            <td><span class="badge ${v.type === 'CAR' ? 'badge-info' : 'badge-warning'}">${v.type}</span></td>
+            <td>${v.numberPlate}</td>
+            <td class="danger-strong">${v.totalKmsRun} km</td>
+            <td>${v.type === 'CAR' ? '3,000' : '1,500'} km</td>
+        </tr>
+    `).join('');
+}
+
+// ── Report 2 ─────────────────────────────────────────
+async function loadByPrice(order) {
+    const data = await apiGet('/vehicles?sort=price_' + order);
+    const tbody = document.getElementById('priceTable');
+    tbody.innerHTML = data.map(v => `
+        <tr>
+            <td>${v.id}</td>
+            <td>${v.name}</td>
+            <td><span class="badge ${v.type === 'CAR' ? 'badge-info' : 'badge-warning'}">${v.type}</span></td>
+            <td class="strong">Rs.${v.rentalPricePerDay}</td>
+            <td>Rs.${v.securityDeposit}</td>
+            <td><span class="badge ${v.isRented ? 'badge-danger' : 'badge-success'}">
+                ${v.isRented ? 'Rented' : 'Free'}
+            </span></td>
+        </tr>
+    `).join('');
+}
+
+// ── Report 3 ─────────────────────────────────────────
+async function loadSearchReport() {
+    const data = await apiGet('/vehicles');
+    renderSearchTable(data);
+}
+
+async function searchReport() {
+    const keyword = document.getElementById('reportSearch').value;
+    const data = await apiGet('/vehicles/search?name=' + keyword);
+    renderSearchTable(data);
+}
+
+async function filterReport(type) {
+    const data = await apiGet('/vehicles/search?type=' + type);
+    renderSearchTable(data);
+}
+
+function renderSearchTable(data) {
+    document.getElementById('searchCount').textContent = 'Results: ' + data.length + ' vehicle(s)';
+    const tbody = document.getElementById('searchTable');
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No results found.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.map(v => `
+        <tr>
+            <td>${v.id}</td>
+            <td>${v.name}</td>
+            <td><span class="badge ${v.type === 'CAR' ? 'badge-info' : 'badge-warning'}">${v.type}</span></td>
+            <td>${v.numberPlate}</td>
+            <td>Rs.${v.rentalPricePerDay}</td>
+            <td>${v.availableCount}</td>
+        </tr>
+    `).join('');
+}
+
+// ── Report 4 ─────────────────────────────────────────
+function loadRentedReport() {
+    const vehicles = allVehiclesCache;
+    const bookings = allBookingsCache;
+
+    const bookedIds = [...new Set(bookings.map(b => b.vehicle.id))];
+
+    const currentlyRented = vehicles.filter(v => v.isRented);
+    const neverRented     = vehicles.filter(v => !v.isRented && !bookedIds.includes(v.id));
+
+    // Currently rented table
+    const rentedTbody = document.getElementById('rentedTable');
+    if (currentlyRented.length === 0) {
+        rentedTbody.innerHTML = '<tr><td colspan="5" class="empty-state">No vehicles currently rented.</td></tr>';
+    } else {
+        rentedTbody.innerHTML = currentlyRented.map(v => {
+            const booking = bookings.find(b => b.vehicle.id === v.id && !b.returned);
+            const email = booking ? booking.user.email : 'Unknown';
+            return `
+                <tr>
+                    <td>${v.id}</td>
+                    <td>${v.name}</td>
+                    <td><span class="badge ${v.type === 'CAR' ? 'badge-info' : 'badge-warning'}">${v.type}</span></td>
+                    <td>${v.numberPlate}</td>
+                    <td>${email}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // Never rented table
+    const neverTbody = document.getElementById('neverRentedTable');
+    if (neverRented.length === 0) {
+        neverTbody.innerHTML = '<tr><td colspan="5" class="empty-state">All vehicles have been rented at least once.</td></tr>';
+    } else {
+        neverTbody.innerHTML = neverRented.map(v => `
+            <tr>
+                <td>${v.id}</td>
+                <td>${v.name}</td>
+                <td><span class="badge ${v.type === 'CAR' ? 'badge-info' : 'badge-warning'}">${v.type}</span></td>
+                <td>${v.numberPlate}</td>
+                <td>Rs.${v.rentalPricePerDay}</td>
+            </tr>
+        `).join('');
+    }
+}
+
+loadAll();
+</script>
+</body>
+</html>

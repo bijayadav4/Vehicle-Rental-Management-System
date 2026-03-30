@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Borrower Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>Vehicle Rental</h1>
+    <div class="navbar-right">
+        <span id="userEmail"></span>
+        <span id="balanceBadge" class="balance-pill"></span>
+        <a href="/my-bookings.html"><button class="btn btn-info">My Bookings</button></a>
+        <a href="/wallet.html"><button class="btn btn-success">Wallet</button></a>
+        <a href="/profile.html"><button class="btn btn-warning">Profile</button></a>
+        <button class="btn btn-secondary" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container">
+    <div id="alert" class="alert"></div>
+
+    <div class="card">
+        <h2>Available Vehicles</h2>
+        <div class="filter-row">
+            <input type="text" id="searchInput" placeholder="Search by name...">
+            <button class="btn btn-primary"  onclick="filterVehicles('ALL')">All</button>
+            <button class="btn btn-info"     onclick="filterVehicles('CAR')">Cars</button>
+            <button class="btn btn-warning"  onclick="filterVehicles('BIKE')">Bikes</button>
+        </div>
+        <div class="vehicle-grid" id="vehicleGrid"></div>
+    </div>
+</div>
+
+<!-- Rent Modal -->
+<div class="modal-overlay hidden" id="rentModal">
+    <div class="modal">
+        <h3>Confirm Rental</h3>
+        <p id="rentDetails" class="modal-copy"></p>
+        <div class="modal-actions">
+            <button class="btn btn-success flex-1" onclick="confirmRent()">Confirm</button>
+            <button class="btn btn-secondary flex-1" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Rating Modal -->
+<div class="modal-overlay hidden" id="ratingModal">
+    <div class="modal">
+        <h3>Rate this Vehicle</h3>
+        <input type="hidden" id="rateVehicleId">
+        <div class="form-group">
+            <label>Stars (1-5)</label>
+            <div class="star-row" id="starRow">
+                <button class="btn btn-warning" onclick="setStar(1)">1 ★</button>
+                <button class="btn btn-warning" onclick="setStar(2)">2 ★</button>
+                <button class="btn btn-warning" onclick="setStar(3)">3 ★</button>
+                <button class="btn btn-warning" onclick="setStar(4)">4 ★</button>
+                <button class="btn btn-warning" onclick="setStar(5)">5 ★</button>
+            </div>
+            <input type="hidden" id="selectedStars" value="5">
+        </div>
+        <div class="form-group">
+            <label>Your Review</label>
+            <input type="text" id="reviewText" placeholder="Write your experience...">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-success flex-1" onclick="submitRating()">Submit</button>
+            <button class="btn btn-secondary flex-1" onclick="closeRatingModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('BORROWER');
+document.getElementById('userEmail').textContent = getEmail();
+
+let allVehicles = [];
+let selectedVehicleId = null;
+
+async function loadProfile() {
+    const user = await apiGet('/user/profile');
+    document.getElementById('balanceBadge').textContent =
+        'Balance: Rs.' + user.securityBalance.toLocaleString();
+}
+
+async function loadVehicles() {
+    allVehicles = await apiGet('/vehicles/available');
+    const ratings = await Promise.all(
+        allVehicles.map(v => apiGet('/user/ratings/' + v.id + '/average'))
+    );
+    allVehicles = allVehicles.map((v, i) => ({
+        ...v, avgRating: ratings[i].average || 0
+    }));
+    renderVehicles(allVehicles);
+}
+
+function renderVehicles(vehicles) {
+    const grid = document.getElementById('vehicleGrid');
+    if (vehicles.length === 0) {
+        grid.innerHTML = '<p class="empty-state">No vehicles available.</p>';
+        return;
+    }
+    grid.innerHTML = vehicles.map(v => {
+        const stars = '★'.repeat(Math.round(v.avgRating)) +
+                      '☆'.repeat(5 - Math.round(v.avgRating));
+        return `
+        <div class="vehicle-card">
+            ${v.imageUrl
+                ? `<img src="${v.imageUrl}" class="vehicle-media">`
+                : `<div class="vehicle-fallback">
+                       ${v.type === 'CAR' ? '🚗' : '🏍️'}
+                   </div>`
+            }
+            <h3>${v.name}</h3>
+            <div class="price">Rs.${v.rentalPricePerDay}
+                <span class="price-sub">/day</span>
+            </div>
+            <div class="details">
+                Type: <strong>${v.type}</strong><br>
+                Plate: ${v.numberPlate}<br>
+                Available: ${v.availableCount} unit(s)<br>
+                Min Deposit: Rs.${v.type === 'CAR' ? '10,000' : '3,000'}
+            </div>
+            <div class="rating-row">
+                ${stars}
+                <span class="rating-meta">(${v.avgRating}/5)</span>
+            </div>
+            <div class="inline-actions">
+                <button class="btn btn-primary flex-1"
+                    onclick="openRentModal(${v.id},'${v.name}',${v.rentalPricePerDay},'${v.type}')">
+                    Rent Now
+                </button>
+                <button class="btn btn-warning btn-sm"
+                    onclick="openRatingModal(${v.id})">Rate</button>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+function filterVehicles(type) {
+    const keyword = document.getElementById('searchInput').value.toLowerCase();
+    let filtered = allVehicles;
+    if (type !== 'ALL') filtered = filtered.filter(v => v.type === type);
+    if (keyword) filtered = filtered.filter(v => v.name.toLowerCase().includes(keyword));
+    renderVehicles(filtered);
+}
+
+function openRentModal(id, name, price, type) {
+    selectedVehicleId = id;
+    document.getElementById('rentDetails').innerHTML =
+        `Vehicle: <strong>${name}</strong><br>
+         Type: <strong>${type}</strong><br>
+         Price: <strong>Rs.${price}/day</strong><br>
+         Min deposit: <strong>Rs.${type === 'CAR' ? '10,000' : '3,000'}</strong>`;
+    document.getElementById('rentModal').classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('rentModal').classList.add('hidden');
+    selectedVehicleId = null;
+}
+
+async function confirmRent() {
+    const data = await apiPost('/bookings/rent', { vehicleId: selectedVehicleId });
+    closeModal();
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    if (data.success) { loadVehicles(); loadProfile(); }
+}
+
+function openRatingModal(vehicleId) {
+    document.getElementById('rateVehicleId').value = vehicleId;
+    document.getElementById('selectedStars').value = 5;
+    document.getElementById('reviewText').value = '';
+    document.getElementById('ratingModal').classList.remove('hidden');
+}
+
+function closeRatingModal() {
+    document.getElementById('ratingModal').classList.add('hidden');
+}
+
+function setStar(n) {
+    document.getElementById('selectedStars').value = n;
+    document.querySelectorAll('#starRow button').forEach((btn, i) => {
+        btn.style.opacity = i < n ? '1' : '0.4';
+    });
+}
+
+async function submitRating() {
+    const body = {
+        vehicleId: +document.getElementById('rateVehicleId').value,
+        stars:     +document.getElementById('selectedStars').value,
+        review:    document.getElementById('reviewText').value
+    };
+    const data = await apiPost('/user/ratings', body);
+    closeRatingModal();
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    if (data.success) loadVehicles();
+}
+
+document.getElementById('searchInput').addEventListener('input', () => filterVehicles('ALL'));
+
+loadProfile();
+loadVehicles();
+</script>
+</body>
+</html>

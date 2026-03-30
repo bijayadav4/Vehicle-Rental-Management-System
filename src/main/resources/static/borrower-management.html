@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Borrower Management</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>Borrower Management</h1>
+    <div class="navbar-right">
+        <a href="/admin-dashboard.html"><button class="btn btn-secondary">Dashboard</button></a>
+        <a href="/admin-reports.html"><button class="btn btn-info">Reports</button></a>
+        <button class="btn btn-danger" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container">
+    <div id="alert" class="alert"></div>
+
+    <!-- Revenue Summary -->
+    <div class="stats-grid" id="revenueStats"></div>
+
+    <!-- Borrowers Table -->
+    <div class="card">
+        <h2>All Borrowers</h2>
+        <div class="search-bar">
+            <input type="text" id="searchUser" placeholder="Search by email..."
+                   >
+            <button class="btn btn-primary" onclick="filterUsers()">Search</button>
+            <button class="btn btn-secondary" onclick="loadBorrowers()">Reset</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Email</th>
+                    <th>Full Name</th>
+                    <th>Phone</th>
+                    <th>Balance</th>
+                    <th>Rented Car</th>
+                    <th>Rented Bike</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="borrowersTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('ADMIN');
+
+let allBorrowers = [];
+
+async function loadRevenue() {
+    const r = await apiGet('/admin/revenue');
+    document.getElementById('revenueStats').innerHTML = `
+        <div class="stat-card">
+            <div class="number" style="font-size:24px">Rs.${r.totalRevenue.toLocaleString()}</div>
+            <div class="label">Total Revenue</div>
+        </div>
+        <div class="stat-card">
+            <div class="number">${r.totalBookings}</div>
+            <div class="label">Total Bookings</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" style="color:#28a745">${r.completedBookings}</div>
+            <div class="label">Completed</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" style="color:#ffc107">${r.activeBookings}</div>
+            <div class="label">Active Now</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" style="font-size:22px">Rs.${r.averagePerBooking}</div>
+            <div class="label">Avg per Booking</div>
+        </div>
+    `;
+}
+
+async function loadBorrowers() {
+    allBorrowers = await apiGet('/admin/borrowers');
+    renderTable(allBorrowers);
+}
+
+function filterUsers() {
+    const keyword = document.getElementById('searchUser').value.toLowerCase();
+    renderTable(allBorrowers.filter(u =>
+        u.email.toLowerCase().includes(keyword)
+    ));
+}
+
+function renderTable(users) {
+    const tbody = document.getElementById('borrowersTable');
+    if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#666">No borrowers found.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = users.map(u => `
+        <tr>
+            <td>${u.id}</td>
+            <td>${u.email}</td>
+            <td>${u.fullName || '-'}</td>
+            <td>${u.phone || '-'}</td>
+            <td>Rs.${u.securityBalance || 0}</td>
+            <td>${u.rentedCarId  ? 'Vehicle #' + u.rentedCarId  : '-'}</td>
+            <td>${u.rentedBikeId ? 'Vehicle #' + u.rentedBikeId : '-'}</td>
+            <td>
+                <span class="badge ${u.isBlocked ? 'badge-danger' : 'badge-success'}">
+                    ${u.isBlocked ? 'Blocked' : 'Active'}
+                </span>
+            </td>
+            <td>
+                ${u.isBlocked
+                    ? `<button class="btn btn-success btn-sm" onclick="unblock(${u.id})">Unblock</button>`
+                    : `<button class="btn btn-danger btn-sm"  onclick="block(${u.id})">Block</button>`
+                }
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function block(id) {
+    if (!confirm('Block this user? They will not be able to login.')) return;
+    const data = await apiPut('/admin/borrowers/' + id + '/block', {});
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    loadBorrowers();
+}
+
+async function unblock(id) {
+    const data = await apiPut('/admin/borrowers/' + id + '/unblock', {});
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    loadBorrowers();
+}
+
+loadRevenue();
+loadBorrowers();
+</script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Bookings</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>My Bookings</h1>
+    <div class="navbar-right">
+        <a href="/borrower-dashboard.html"><button class="btn btn-primary">Browse</button></a>
+        <a href="/return-vehicle.html"><button class="btn btn-warning">Return / Extend</button></a>
+        <a href="/wallet.html"><button class="btn btn-success">Wallet</button></a>
+        <button class="btn btn-secondary" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container">
+    <div id="alert" class="alert"></div>
+
+    <!-- Active Rentals -->
+    <div class="card">
+        <h2>Active Rentals</h2>
+        <div id="activeBookings"></div>
+    </div>
+
+    <!-- History with invoice download -->
+    <div class="card">
+        <h2>Full Rental History</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Vehicle</th>
+                    <th>Type</th>
+                    <th>Rented On</th>
+                    <th>Returned On</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Invoice</th>
+                </tr>
+            </thead>
+            <tbody id="historyTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('BORROWER');
+
+async function loadActive() {
+    const bookings = await apiGet('/bookings/my/active');
+    const div = document.getElementById('activeBookings');
+    if (bookings.length === 0) {
+        div.innerHTML = '<p style="color:#666;padding:8px">No active rentals.</p>';
+        return;
+    }
+    div.innerHTML = bookings.map(b => `
+        <div class="booking-item">
+            <strong>${b.vehicle.name}</strong> (${b.vehicle.type})
+            &nbsp;|&nbsp; Booking <strong>#${b.id}</strong>
+            &nbsp;|&nbsp; Rented: ${b.rentDate}
+            &nbsp;|&nbsp; Return by: ${b.returnDate}
+            &nbsp;|&nbsp; Rs.${b.totalRent}
+            <div class="actions-row" style="margin-top:10px">
+                <a href="/return-vehicle.html?bookingId=${b.id}">
+                    <button class="btn btn-success btn-sm">Return</button>
+                </a>
+                <button class="btn btn-warning btn-sm"
+                        onclick="extendBooking(${b.id})">Extend</button>
+                <button class="btn btn-info btn-sm"
+                        onclick="downloadInvoice(${b.id})">Invoice PDF</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadHistory() {
+    const bookings = await apiGet('/bookings/my');
+    const tbody = document.getElementById('historyTable');
+    if (bookings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#666">No history yet.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = bookings.map(b => `
+        <tr>
+            <td>${b.id}</td>
+            <td>${b.vehicle.name}</td>
+            <td><span class="badge ${b.vehicle.type === 'CAR' ? 'badge-info' : 'badge-warning'}">
+                ${b.vehicle.type}
+            </span></td>
+            <td>${b.rentDate}</td>
+            <td>${b.returnDate || '-'}</td>
+            <td>Rs.${b.totalRent}</td>
+            <td><span class="badge ${b.returned ? 'badge-success' : 'badge-warning'}">
+                ${b.returned ? 'Returned' : 'Active'}
+            </span></td>
+            <td>
+                <button class="btn btn-info btn-sm"
+                        onclick="downloadInvoice(${b.id})">
+                    Download PDF
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function extendBooking(bookingId) {
+    if (!confirm('Extend this booking by 1 day?')) return;
+    const data = await apiPost('/bookings/extend', { bookingId });
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    if (data.success) { loadActive(); loadHistory(); }
+}
+
+function downloadInvoice(bookingId) {
+    const token = getToken();
+    const url = `http://localhost:8080/api/invoice/${bookingId}`;
+    fetch(url, {
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(res => res.blob())
+    .then(blob => {
+        const link = document.createElement('a');
+        link.href  = URL.createObjectURL(blob);
+        link.download = 'invoice-' + bookingId + '.pdf';
+        link.click();
+    })
+    .catch(() => showAlert('alert', 'Failed to download invoice.', 'danger'));
+}
+
+loadActive();
+loadHistory();
+</script>
+</body>
+</html>

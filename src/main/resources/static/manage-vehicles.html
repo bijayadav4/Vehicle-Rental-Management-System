@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Vehicles</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>Manage Vehicles</h1>
+    <div class="navbar-right">
+        <a href="/admin-dashboard.html"><button class="btn btn-secondary">Dashboard</button></a>
+        <a href="/borrower-management.html"><button class="btn btn-info">Borrowers</button></a>
+        <button class="btn btn-danger" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container">
+    <div id="alert" class="alert"></div>
+
+    <!-- Add Vehicle -->
+    <div class="card">
+        <h2>Add New Vehicle</h2>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="vName" placeholder="Honda City">
+            </div>
+            <div class="form-group">
+                <label>Number Plate</label>
+                <input type="text" id="vPlate" placeholder="TN01AB1234">
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select id="vType">
+                    <option value="CAR">Car</option>
+                    <option value="BIKE">Bike</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Rental Price / Day (Rs.)</label>
+                <input type="number" id="vPrice" placeholder="1500" min="1" value="1500">
+            </div>
+            <div class="form-group">
+                <label>Available Count</label>
+                <input type="number" id="vCount" placeholder="3" min="1" value="1">
+            </div>
+            <div class="form-group">
+                <label>Security Deposit (Rs.)</label>
+                <input type="number" id="vDeposit" placeholder="10000" min="0" value="10000">
+            </div>
+        </div>
+        <button class="btn btn-success" onclick="addVehicle()">Add Vehicle</button>
+    </div>
+
+    <!-- Vehicle Table -->
+    <div class="card">
+        <h2>All Vehicles</h2>
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Search by name...">
+            <button class="btn btn-primary" onclick="searchVehicles()">Search</button>
+            <button class="btn btn-secondary" onclick="loadVehicles()">Reset</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th><th>Image</th><th>Name</th><th>Type</th>
+                    <th>Plate</th><th>Price/Day</th><th>Count</th>
+                    <th>KMs</th><th>Service</th><th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="vehicleTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Image Upload Modal -->
+<div class="modal-overlay hidden" id="uploadModal">
+    <div class="modal">
+        <h3>Upload Vehicle Image</h3>
+        <input type="hidden" id="uploadVehicleId">
+        <div class="form-group">
+            <label>Select Image (JPG/PNG/WEBP, max 5MB)</label>
+            <input type="file" id="imageFile" accept=".jpg,.jpeg,.png,.webp"
+                   >
+        </div>
+        <div id="imagePreview" class="empty-state"></div>
+        <div class="modal-actions mt-16">
+            <button class="btn btn-success flex-1" onclick="doUpload()">Upload</button>
+            <button class="btn btn-secondary flex-1" onclick="closeUploadModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('ADMIN');
+
+async function loadVehicles() {
+    const vehicles = await apiGet('/vehicles');
+    renderTable(vehicles);
+}
+
+function renderTable(vehicles) {
+    const tbody = document.getElementById('vehicleTable');
+    tbody.innerHTML = vehicles.map(v => `
+        <tr>
+            <td>${v.id}</td>
+            <td>
+                ${v.imageUrl
+                    ? `<img src="${v.imageUrl}" class="image-thumb">`
+                    : `<span class="image-placeholder">
+                         ${v.type === 'CAR' ? '🚗' : '🏍️'}
+                       </span>`
+                }
+            </td>
+            <td>${v.name}</td>
+            <td>
+                <span class="badge ${v.type === 'CAR' ? 'badge-info' : 'badge-warning'}">
+                    ${v.type}
+                </span>
+            </td>
+            <td>${v.numberPlate}</td>
+            <td>Rs.${v.rentalPricePerDay}</td>
+            <td>${v.availableCount}</td>
+            <td>${v.totalKmsRun}</td>
+            <td>
+                <span class="badge ${v.totalKmsRun >= (v.type === 'CAR' ? 3000 : 1500)
+                    ? 'badge-danger' : 'badge-success'}">
+                    ${v.totalKmsRun >= (v.type === 'CAR' ? 3000 : 1500) ? 'DUE' : 'OK'}
+                </span>
+            </td>
+            <td class="cell-actions">
+                <button class="btn btn-warning btn-sm"
+                        onclick="editVehicle(${v.id})">Edit</button>
+                <button class="btn btn-danger btn-sm"
+                        onclick="deleteVehicle(${v.id})">Delete</button>
+                <button class="btn btn-success btn-sm"
+                        onclick="markServiced(${v.id})">Serviced</button>
+                <button class="btn btn-info btn-sm"
+                        onclick="openUploadModal(${v.id})">Image</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function addVehicle() {
+    const availableCount = Number(document.getElementById('vCount').value);
+    const rentalPricePerDay = Number(document.getElementById('vPrice').value);
+    const securityDeposit = Number(document.getElementById('vDeposit').value);
+
+    if (!Number.isFinite(availableCount) || availableCount < 1) {
+        showAlert('alert', 'Available count must be at least 1.', 'danger');
+        return;
+    }
+    if (!Number.isFinite(rentalPricePerDay) || rentalPricePerDay <= 0) {
+        showAlert('alert', 'Rental price must be greater than 0.', 'danger');
+        return;
+    }
+    if (!Number.isFinite(securityDeposit) || securityDeposit < 0) {
+        showAlert('alert', 'Security deposit cannot be negative.', 'danger');
+        return;
+    }
+
+    const body = {
+        name:             document.getElementById('vName').value,
+        numberPlate:      document.getElementById('vPlate').value,
+        type:             document.getElementById('vType').value,
+        rentalPricePerDay,
+        availableCount,
+        securityDeposit
+    };
+    const data = await apiPost('/vehicles', body);
+    if (data.id) {
+        showAlert('alert', 'Vehicle added: ' + data.name, 'success');
+        loadVehicles();
+    } else {
+        showAlert('alert', data.message || 'Failed to add vehicle.', 'danger');
+    }
+}
+
+async function editVehicle(id) {
+    const count = prompt('New available count:');
+    if (count === null) return;
+    const data = await apiPut('/vehicles/' + id, { availableCount: +count });
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    loadVehicles();
+}
+
+async function deleteVehicle(id) {
+    if (!confirm('Delete this vehicle?')) return;
+    const data = await apiDelete('/vehicles/' + id);
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    loadVehicles();
+}
+
+async function markServiced(id) {
+    if (!confirm('Mark as serviced? KM counter resets to 0.')) return;
+    const data = await apiPut('/admin/vehicles/' + id + '/service', {});
+    showAlert('alert', data.message, data.success ? 'success' : 'danger');
+    loadVehicles();
+}
+
+function openUploadModal(vehicleId) {
+    document.getElementById('uploadVehicleId').value = vehicleId;
+    document.getElementById('imageFile').value = '';
+    document.getElementById('imagePreview').innerHTML = '';
+    document.getElementById('uploadModal').classList.remove('hidden');
+}
+
+function closeUploadModal() {
+    document.getElementById('uploadModal').classList.add('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('imageFile').addEventListener('change', function() {
+        const file = this.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById('imagePreview').innerHTML =
+                `<img src="${e.target.result}"
+                      class="preview-image">`;
+        };
+        reader.readAsDataURL(file);
+    });
+});
+
+async function doUpload() {
+    const vehicleId = document.getElementById('uploadVehicleId').value;
+    const file = document.getElementById('imageFile').files[0];
+    if (!file) {
+        showAlert('alert', 'Please select an image file first.', 'danger');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await fetch(
+            'http://localhost:8080/api/upload/vehicle/' + vehicleId + '/image',
+            {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + getToken() },
+                body: formData
+            }
+        );
+
+        let data;
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            data = await res.json();
+        } else {
+            const text = await res.text();
+            data = { success: false, message: text || 'Upload failed.' };
+        }
+
+        closeUploadModal();
+        showAlert('alert', data.message || 'Upload failed.',
+            data.success ? 'success' : 'danger');
+        if (data.success) loadVehicles();
+    } catch (err) {
+        closeUploadModal();
+        showAlert('alert', 'Upload failed. Please try again.', 'danger');
+    }
+}
+
+async function searchVehicles() {
+    const keyword = document.getElementById('searchInput').value;
+    const data = await apiGet('/vehicles/search?name=' + keyword);
+    renderTable(data);
+}
+
+loadVehicles();
+</script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+    <h1>Vehicle Rental — Admin</h1>
+    <div class="navbar-right">
+        <span id="adminEmail"></span>
+        <a href="/manage-vehicles.html"><button class="btn btn-primary">Vehicles</button></a>
+        <a href="/borrower-management.html"><button class="btn btn-info">Borrowers</button></a>
+        <a href="/admin-reports.html"><button class="btn btn-warning">Reports</button></a>
+        <button class="btn btn-secondary" onclick="logout()">Logout</button>
+    </div>
+</nav>
+
+<div class="container">
+
+    <!-- Stats Row -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="number" id="totalVehicles">-</div>
+            <div class="label">Total Vehicles</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" id="availableVehicles">-</div>
+            <div class="label">Available Now</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" id="rentedVehicles">-</div>
+            <div class="label">Currently Rented</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" id="serviceDue">-</div>
+            <div class="label">Service Due</div>
+        </div>
+        <div class="stat-card">
+            <div class="number" id="totalRevenue">-</div>
+            <div class="label">Total Revenue</div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="dashboard-chart-grid">
+
+        <!-- Pie Chart — Vehicle types -->
+        <div class="card chart-card">
+            <h2>Vehicle Type Split</h2>
+            <canvas id="typeChart" class="chart-canvas"></canvas>
+        </div>
+
+        <!-- Bar Chart — Bookings overview -->
+        <div class="card chart-card">
+            <h2>Bookings Overview</h2>
+            <canvas id="bookingChart" class="chart-canvas"></canvas>
+        </div>
+
+    </div>
+
+    <!-- Recent Bookings -->
+    <div class="card">
+        <h2>Recent Bookings</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th><th>Borrower</th><th>Vehicle</th>
+                    <th>Date</th><th>Amount</th><th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="bookingsTable"></tbody>
+        </table>
+    </div>
+
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+requireAuth('ADMIN');
+document.getElementById('adminEmail').textContent = getEmail();
+
+async function loadDashboard() {
+    const [all, available, serviceDue, bookings, revenue] = await Promise.all([
+        apiGet('/vehicles'),
+        apiGet('/vehicles/available'),
+        apiGet('/vehicles/service-due'),
+        apiGet('/bookings/all'),
+        apiGet('/admin/revenue')
+    ]);
+
+    const rented = all.filter(v => v.isRented);
+
+    document.getElementById('totalVehicles').textContent     = all.length;
+    document.getElementById('availableVehicles').textContent = available.length;
+    document.getElementById('rentedVehicles').textContent    = rented.length;
+    document.getElementById('serviceDue').textContent        = serviceDue.length;
+    document.getElementById('totalRevenue').textContent      =
+        'Rs.' + revenue.totalRevenue.toLocaleString();
+
+    drawTypeChart(all);
+    drawBookingChart(revenue);
+    renderBookings(bookings.slice(-10).reverse());
+}
+
+function drawTypeChart(vehicles) {
+    const cars  = vehicles.filter(v => v.type === 'CAR').length;
+    const bikes = vehicles.filter(v => v.type === 'BIKE').length;
+    new Chart(document.getElementById('typeChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Cars', 'Bikes'],
+            datasets: [{
+                data: [cars, bikes],
+                backgroundColor: ['#e94560', '#17a2b8'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } },
+            cutout: '65%'
+        }
+    });
+}
+
+function drawBookingChart(revenue) {
+    new Chart(document.getElementById('bookingChart'), {
+        type: 'bar',
+        data: {
+            labels: ['Total', 'Completed', 'Active'],
+            datasets: [{
+                label: 'Bookings',
+                data: [revenue.totalBookings,
+                       revenue.completedBookings,
+                       revenue.activeBookings],
+                backgroundColor: ['#1a1a2e', '#28a745', '#ffc107'],
+                borderRadius: 8,
+                borderWidth: 0
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+    });
+}
+
+function renderBookings(bookings) {
+    const tbody = document.getElementById('bookingsTable');
+    if (bookings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#666">No bookings yet.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = bookings.map(b => `
+        <tr>
+            <td>${b.id}</td>
+            <td>${b.user.email}</td>
+            <td>${b.vehicle.name}</td>
+            <td>${b.rentDate}</td>
+            <td>Rs.${b.totalRent}</td>
+            <td><span class="badge ${b.returned ? 'badge-success' : 'badge-warning'}">
+                ${b.returned ? 'Returned' : 'Active'}
+            </span></td>
+        </tr>
+    `).join('');
+}
+
+loadDashboard();
+</script>
+</body>
+</html>

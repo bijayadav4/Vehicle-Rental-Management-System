@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Rental System</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="login-wrapper">
+    <div class="login-box">
+        <h1>Vehicle Rental</h1>
+        <p>Rent cars and bikes with ease</p>
+
+        <div class="tab-btns">
+            <button class="tab-btn active" onclick="showTab('login')">Login</button>
+            <button class="tab-btn" onclick="showTab('signup')">Sign Up</button>
+        </div>
+
+        <div id="alert" class="alert"></div>
+
+        <!-- Login Form -->
+        <div id="loginForm">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="loginEmail" placeholder="admin@rental.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="loginPassword" placeholder="Enter password">
+            </div>
+            <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Login</button>
+        </div>
+
+        <!-- Signup Form -->
+        <div id="signupForm" class="hidden">
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="signupEmail" placeholder="your@email.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="signupPassword" placeholder="Choose a password">
+            </div>
+            <button class="btn btn-success" style="width:100%" onclick="doSignup()">Create Account</button>
+        </div>
+
+        <p style="margin-top:16px;font-size:12px;color:#999;text-align:center">
+            Admin: admin@rental.com / admin123
+        </p>
+    </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+if (params.get('expired') === '1') {
+    setTimeout(() => {
+        showAlert('alert', 'Session expired. Please login again.', 'danger');
+    }, 0);
+}
+
+function showTab(tab) {
+    document.getElementById('loginForm').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('signupForm').classList.toggle('hidden', tab !== 'signup');
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'signup'));
+    });
+}
+
+async function doLogin() {
+    const email    = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    if (!email || !password) { showAlert('alert', 'Please fill all fields.', 'danger'); return; }
+
+    const data = await apiPost('/auth/login', { email, password }, false);
+
+    if (data.token) {
+        ['token', 'role', 'email', 'userId'].forEach(key => {
+            localStorage.removeItem(key);
+            sessionStorage.removeItem(key);
+        });
+        sessionStorage.setItem('token',  data.token);
+        sessionStorage.setItem('role',   data.role);
+        sessionStorage.setItem('email',  data.email);
+        sessionStorage.setItem('userId', data.userId);
+
+        if (data.role === 'ADMIN') {
+            window.location.href = '/admin-dashboard.html';
+        } else {
+            window.location.href = '/borrower-dashboard.html';
+        }
+    } else {
+        showAlert('alert', 'Invalid email or password.', 'danger');
+    }
+}
+
+async function doSignup() {
+    const email    = document.getElementById('signupEmail').value;
+    const password = document.getElementById('signupPassword').value;
+    if (!email || !password) { showAlert('alert', 'Please fill all fields.', 'danger'); return; }
+
+    const data = await apiPost('/auth/signup', { email, password }, false);
+    if (data.success) {
+        showAlert('alert', 'Account created! Please login.', 'success');
+        showTab('login');
+    } else {
+        showAlert('alert', data.message, 'danger');
+    }
+}
+</script>
+</body>
+</html>
