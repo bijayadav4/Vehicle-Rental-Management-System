@@ -4,10 +4,6 @@ services:
     runtime: docker
     plan: free
     autoDeploy: true
-    disk:
-      name: vehicle-rental-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: DB_URL
         sync: false
@@ -30,4 +26,4 @@ services:
       - key: APP_BASE_URL
         sync: false
       - key: UPLOAD_DIR
-        value: /var/data/uploads
+        value: /tmp/uploads

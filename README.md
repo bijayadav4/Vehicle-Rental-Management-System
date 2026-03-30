@@ -121,7 +121,7 @@ This project now includes:
 1. Push this repository to GitHub.
 2. Create a MySQL database (for example Render PostgreSQL is not compatible here, so use MySQL from Aiven, PlanetScale, Railway, or another provider).
 3. In Render, choose **New +** -> **Blueprint** and select your GitHub repository.
-4. Render reads `render.yaml` and creates the web service + persistent disk.
+4. Render reads `render.yaml` and creates the web service.
 5. Set required secrets in Render dashboard:
   - `DB_URL`
   - `DB_USERNAME`
@@ -134,8 +134,8 @@ This project now includes:
 
 ### Important Deployment Note
 
-- Uploaded files are stored on mounted disk path `/var/data/uploads` on Render (via `UPLOAD_DIR`).
-- If you deploy to another host, set `UPLOAD_DIR` to a writable persistent directory there.
+- On Render free tier, uploaded files are stored in `/tmp/uploads` (ephemeral storage).
+- If you need persistent uploaded files, upgrade plan and attach a disk, or use cloud object storage.
 
 ## Build and Test
 
