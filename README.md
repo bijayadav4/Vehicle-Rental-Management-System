@@ -105,6 +105,38 @@ Open:
 http://localhost:8080
 ```
 
+## Run Live From GitHub
+
+GitHub hosts your source code, but it does not run a Spring Boot server by itself.
+For a live URL, deploy this repository to Render (or Railway/Fly.io).
+
+This project now includes:
+
+- `Dockerfile` for containerized build and run
+- `render.yaml` for one-click Render setup from GitHub
+- `server.port=${PORT:8080}` support for cloud platforms
+
+### Render Deployment Steps
+
+1. Push this repository to GitHub.
+2. Create a MySQL database (for example Render PostgreSQL is not compatible here, so use MySQL from Aiven, PlanetScale, Railway, or another provider).
+3. In Render, choose **New +** -> **Blueprint** and select your GitHub repository.
+4. Render reads `render.yaml` and creates the web service + persistent disk.
+5. Set required secrets in Render dashboard:
+  - `DB_URL`
+  - `DB_USERNAME`
+  - `DB_PASSWORD`
+  - `JWT_SECRET`
+  - `MAIL_USERNAME`
+  - `MAIL_PASSWORD`
+  - `APP_BASE_URL` (your Render app URL)
+6. Deploy and open the generated live URL.
+
+### Important Deployment Note
+
+- Uploaded files are stored on mounted disk path `/var/data/uploads` on Render (via `UPLOAD_DIR`).
+- If you deploy to another host, set `UPLOAD_DIR` to a writable persistent directory there.
+
 ## Build and Test
 
 Compile without tests:
@@ -183,5 +215,5 @@ Authorization: Bearer <jwt-token>
 
 ## Security Note
 
-The repository currently contains sample credentials in config files intended for local development. Rotate credentials and move all secrets to environment variables or a secure secret manager before production use.
+No real credentials should be committed. Keep secrets only in `.env` (local) or deployment platform environment variables (production).
 
